@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>健康諮詢小幫手</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 30px;
+        }
+
+        #chat {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            min-height: 220px;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .user {
+            background: #dbeafe;
+            text-align: right;
+        }
+
+        .model {
+            background: #eeeeee;
+        }
+
+        #form,
+        .hint,
+        .samples {
+            max-width: 800px;
+            margin: 12px auto;
+        }
+
+        #form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        #input {
+            flex: 1;
+            min-width: 240px;
+            padding: 12px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+        }
+
+        .hint {
+            color: #444;
+            line-height: 1.6;
+        }
+
+        .cursor::after {
+            content: "▍";
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <p class="hint">
+        先勾選檢索，依序問下面兩題。問完後取消勾選，再按「整理重點」。
+        取消勾選時，模型只看前面的對話，不會再去找新聞。
+    </p>
+
+    <div class="samples">
+        <button type="button" class="sample" data-text="大腸癌有可能完全沒有症狀嗎？">問題 1</button>
+        <button type="button" class="sample" data-text="直腸癌治療可以保住排便功能嗎？">問題 2</button>
+        <button type="button" class="sample" data-text="請把我剛才問的問題整理成重點。">整理重點</button>
+    </div>
+
+    <form id="form">
+        <label>
+            <input id="retrieve" type="checkbox" checked>
+            多輪對話時進行檢索
+        </label>
+        <input id="input" type="text" placeholder="請輸入健康問題">
+        <button type="submit">送出</button>
+        <button type="button" id="clear">清除</button>
+    </form>
+
+    <div id="chat"></div>
+
+    <script>
+        const chatDiv = document.getElementById("chat");
+        const form = document.getElementById("form");
+        const input = document.getElementById("input");
+        const clearBtn = document.getElementById("clear");
+        const retrieveBox = document.getElementById("retrieve");
+
+        function addMessage(role, text) {
+            const div = document.createElement("div");
+            div.className = "message " + role;
+            div.textContent = text;
+            chatDiv.appendChild(div);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            return div;
+        }
+
+        async function loadHistory() {
+            const response = await fetch("/api/history");
+            const history = await response.json();
+            chatDiv.innerHTML = "";
+            history.forEach(msg => {
+                addMessage(msg.role, msg.text);
+            });
+        }
+
+        document.querySelectorAll(".sample").forEach(button => {
+            button.addEventListener("click", function () {
+                input.value = button.dataset.text;
+                // 問新聞時打開檢索；整理重點時關掉，模型才看前面的對話。
+                retrieveBox.checked = button.textContent !== "整理重點";
+                input.focus();
+            });
+        });
+
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = "";
+            addMessage("user", message);
+
+            const modelDiv = addMessage("model", "");
+            modelDiv.classList.add("cursor");
+
+            const response = await fetch("/api/chat/stream", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    message: message,
+                    retrieve: retrieveBox.checked
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const result = await reader.read();
+                if (result.done) {
+                    break;
+                }
+                modelDiv.textContent += decoder.decode(result.value);
+            }
+
+            modelDiv.classList.remove("cursor");
+        });
+
+        clearBtn.addEventListener("click", async function () {
+            await fetch("/api/clear", {
+                method: "POST"
+            });
+            chatDiv.innerHTML = "";
+        });
+
+        loadHistory();
+    </script>
+</body>
+
+</html>

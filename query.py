@@ -1,6 +1,12 @@
 '''
 匯入套件
 '''
+import os
+
+# macOS 上 torch 和 faiss 各自帶一份 OpenMP，多執行緒時會互相衝突而 segfault。
+# 要在 import 之前設定。
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 from sentence_transformers import SentenceTransformer
 import faiss
 import sqlite3
@@ -14,7 +20,7 @@ index_path = './vector.index'
 index = faiss.read_index(index_path)
 
 # 查詢句子
-list_query = ['有人用 AI 來偵測大腸瘜肉嗎？']
+list_query = ['吃到苯駢芘超標的油品該怎麼辦？']
 
 # 將查詢句子轉換成向量
 embeddings = encoder.encode(

@@ -7,9 +7,12 @@ def create_database(db_name):
     conn = sqlite3.connect(db_name)
     cursor = conn.cursor()
 
+    # 重新爬取後要整份換掉，避免和舊資料混在一起
+    cursor.execute("DROP TABLE IF EXISTS news")
+
     # 建立資料表
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS news (
+        CREATE TABLE news (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             link TEXT,
             reporter TEXT,
